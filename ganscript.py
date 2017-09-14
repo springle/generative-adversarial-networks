@@ -116,38 +116,37 @@ def main(server, log_dir, context):
 
     with tf.device("/job:worker/task:0"):
         Gz = generator(z_placeholder, batch_size, z_dimensions)
+        g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dg, labels=tf.ones_like(Dg)))
         # Gz holds the generated images
 
     with tf.device("/job:worker/task:1"):
         Dx = discriminator(x_placeholder)
+        d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dx, labels=tf.ones_like(Dx)))
         # Dx will hold discriminator prediction probabilities
         # for the real MNIST images
 
-    with tf.device("/job:worker/task:1"):
+    with tf.device("/job:worker/task:2"):
         Dg = discriminator(Gz, reuse_variables=True)
-        # Dg will hold discriminator prediction probabilities for generated images
-
-    # Define losses
-    with tf.device("/job:worker/task:0"):
-        g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dg, labels=tf.ones_like(Dg)))
-    with tf.device("/job:worker/task:1"):
-        d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dx, labels=tf.ones_like(Dx)))
         d_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dg, labels=tf.zeros_like(Dg)))
+        # Dg will hold discriminator prediction probabilities for generated images
 
     # Define variable lists
     tvars = tf.trainable_variables()
-    d_vars = [var for var in tvars if 'd_' in var.name]
-    g_vars = [var for var in tvars if 'g_' in var.name]
+    with tf.device("/job:ps/task:0"):
+        d_vars = [var for var in tvars if 'd_' in var.name]
+    with tf.device("/job:ps/task:1"):
+        g_vars = [var for var in tvars if 'g_' in var.name]
+
+    # Train the generator
+    with tf.device("/job:worker/task:0"):
+        g_trainer = tf.train.AdamOptimizer(0.0001).minimize(g_loss, var_list=g_vars)
 
     # Define the optimizers
     # Train the discriminator
     with tf.device("/job:worker/task:1"):
         d_trainer_fake = tf.train.AdamOptimizer(0.0003).minimize(d_loss_fake, var_list=d_vars)
+    with tf.device("/job:worker/task:2"):
         d_trainer_real = tf.train.AdamOptimizer(0.0003).minimize(d_loss_real, var_list=d_vars)
-
-    # Train the generator
-    with tf.device("/job:worker/task:0"):
-        g_trainer = tf.train.AdamOptimizer(0.0001).minimize(g_loss, var_list=g_vars)
 
     # From this point forward, reuse variables
     tf.get_variable_scope().reuse_variables()
