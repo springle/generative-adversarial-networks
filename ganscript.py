@@ -116,7 +116,6 @@ def main(server, log_dir, context):
 
     with tf.device("/job:worker/task:0"):
         Gz = generator(z_placeholder, batch_size, z_dimensions)
-        g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dg, labels=tf.ones_like(Dg)))
         # Gz holds the generated images
 
     with tf.device("/job:worker/task:1"):
@@ -128,6 +127,7 @@ def main(server, log_dir, context):
     with tf.device("/job:worker/task:2"):
         Dg = discriminator(Gz, reuse_variables=True)
         d_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dg, labels=tf.zeros_like(Dg)))
+        g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dg, labels=tf.ones_like(Dg)))
         # Dg will hold discriminator prediction probabilities for generated images
 
     # Define variable lists
