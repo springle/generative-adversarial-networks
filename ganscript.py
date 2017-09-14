@@ -160,11 +160,12 @@ def main(server, log_dir, context):
     images_for_tensorboard = generator(z_placeholder, batch_size, z_dimensions)
     tf.summary.image('Generated_images', images_for_tensorboard, 5)
     merged = tf.summary.merge_all()
-    writer = tf.summary.FileWriter(log_dir, sess.graph)
 
     is_chief = server.server_def.task_index == 0
     with tf.train.MonitoredTrainingSession(master=server.target,
                                            is_chief=is_chief) as sess:
+
+        writer = tf.summary.FileWriter(log_dir, sess.graph)
 
         # Pre-train discriminator
         for i in range(300):
