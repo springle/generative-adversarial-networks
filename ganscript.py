@@ -170,6 +170,7 @@ def main(server, log_dir, context):
                                                    {x_placeholder: real_image_batch, z_placeholder: z_batch})
 
         # Train generator and discriminator together
+        local_step = 0
         while True:
             real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
             z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
@@ -182,8 +183,10 @@ def main(server, log_dir, context):
             z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
             _ = sess.run(g_trainer, feed_dict={z_placeholder: z_batch})
 
-            if i % 10 == 0:
+            if is_chief and (local_step % 10 == 0):
                 # Update TensorBoard with summary statistics
                 z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
                 summary = sess.run(merged, {z_placeholder: z_batch, x_placeholder: real_image_batch})
                 writer.add_summary(summary, i)
+
+            local_step += 1
