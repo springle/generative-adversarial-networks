@@ -152,21 +152,19 @@ def main(server, log_dir, context):
     # From this point forward, reuse variables
     tf.get_variable_scope().reuse_variables()
 
+    # Send summary statistics to TensorBoard
+    tf.summary.scalar('Generator_loss', g_loss)
+    tf.summary.scalar('Discriminator_loss_real', d_loss_real)
+    tf.summary.scalar('Discriminator_loss_fake', d_loss_fake)
+
+    images_for_tensorboard = generator(z_placeholder, batch_size, z_dimensions)
+    tf.summary.image('Generated_images', images_for_tensorboard, 5)
+    merged = tf.summary.merge_all()
+    writer = tf.summary.FileWriter(log_dir, sess.graph)
+
     is_chief = server.server_def.task_index == 0
     with tf.train.MonitoredTrainingSession(master=server.target,
                                            is_chief=is_chief) as sess:
-
-        # Send summary statistics to TensorBoard
-        tf.summary.scalar('Generator_loss', g_loss)
-        tf.summary.scalar('Discriminator_loss_real', d_loss_real)
-        tf.summary.scalar('Discriminator_loss_fake', d_loss_fake)
-
-        images_for_tensorboard = generator(z_placeholder, batch_size, z_dimensions)
-        tf.summary.image('Generated_images', images_for_tensorboard, 5)
-        merged = tf.summary.merge_all()
-        writer = tf.summary.FileWriter(log_dir, sess.graph)
-
-        sess.run(tf.global_variables_initializer())
 
         # Pre-train discriminator
         for i in range(300):
