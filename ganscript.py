@@ -161,6 +161,7 @@ def main(server, log_dir, context):
                                            hooks=hooks) as sess:
 
         if is_chief:
+            print("I am the chief!")
             print("Creating writer")
             writer = tf.summary.FileWriter(log_dir, sess.graph)
 
@@ -177,6 +178,7 @@ def main(server, log_dir, context):
 
         # Train generator and discriminator together
         local_step = 0
+        print("Training generator and discriminator together...")
         while True:
             real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
             z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
@@ -195,5 +197,8 @@ def main(server, log_dir, context):
                 z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
                 summary = sess.run(merged, {z_placeholder: z_batch, x_placeholder: real_image_batch})
                 writer.add_summary(summary, local_step/10)
+
+            if local_step % 50 == 0:
+                print("Reached local step {} (global step {})".format(local_step, sess.run(global_step)))
 
             local_step += 1
