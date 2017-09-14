@@ -160,7 +160,9 @@ def main(server, log_dir, context):
                                            is_chief=is_chief,
                                            hooks=hooks) as sess:
 
-        writer = tf.summary.FileWriter(log_dir, sess.graph)
+        if is_chief:
+            print("Creating writer")
+            writer = tf.summary.FileWriter(log_dir, sess.graph)
 
         print("Pre-training discriminator...")
 
