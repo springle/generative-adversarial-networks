@@ -162,12 +162,16 @@ def main(server, log_dir, context):
 
         writer = tf.summary.FileWriter(log_dir, sess.graph)
 
+        print("Pre-training discriminator...")
+
         # Pre-train discriminator
         while sess.run(global_step) < 300:
             z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
             real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
             _, __, dLossReal, dLossFake = sess.run([d_trainer_real, d_trainer_fake, d_loss_real, d_loss_fake],
                                                    {x_placeholder: real_image_batch, z_placeholder: z_batch})
+
+        print("Finished pre-training discriminator...")
 
         # Train generator and discriminator together
         local_step = 0
@@ -185,6 +189,7 @@ def main(server, log_dir, context):
 
             if is_chief and (local_step % 10 == 0):
                 # Update TensorBoard with summary statistics
+                print("Saving summary {}".format(str(local_step/10)))
                 z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
                 summary = sess.run(merged, {z_placeholder: z_batch, x_placeholder: real_image_batch})
                 writer.add_summary(summary, local_step/10)
