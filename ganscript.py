@@ -187,6 +187,6 @@ def main(server, log_dir, context):
                 # Update TensorBoard with summary statistics
                 z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
                 summary = sess.run(merged, {z_placeholder: z_batch, x_placeholder: real_image_batch})
-                writer.add_summary(summary, i)
+                writer.add_summary(summary, local_step/10)
 
             local_step += 1
