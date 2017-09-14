@@ -19,7 +19,9 @@ import datetime
 
 # Load MNIST data
 from tensorflow.examples.tutorials.mnist import input_data
+
 mnist = input_data.read_data_sets("MNIST_data/")
+
 
 # Define the discriminator network
 def discriminator(images, reuse_variables=None):
@@ -58,9 +60,11 @@ def discriminator(images, reuse_variables=None):
         # d4 contains unscaled values
         return d4
 
+
 # Define the generator network
 def generator(z, batch_size, z_dim):
-    g_w1 = tf.get_variable('g_w1', [z_dim, 3136], dtype=tf.float32, initializer=tf.truncated_normal_initializer(stddev=0.02))
+    g_w1 = tf.get_variable('g_w1', [z_dim, 3136], dtype=tf.float32,
+                           initializer=tf.truncated_normal_initializer(stddev=0.02))
     g_b1 = tf.get_variable('g_b1', [3136], initializer=tf.truncated_normal_initializer(stddev=0.02))
     g1 = tf.matmul(z, g_w1) + g_b1
     g1 = tf.reshape(g1, [-1, 56, 56, 1])
@@ -68,8 +72,9 @@ def generator(z, batch_size, z_dim):
     g1 = tf.nn.relu(g1)
 
     # Generate 50 features
-    g_w2 = tf.get_variable('g_w2', [3, 3, 1, z_dim/2], dtype=tf.float32, initializer=tf.truncated_normal_initializer(stddev=0.02))
-    g_b2 = tf.get_variable('g_b2', [z_dim/2], initializer=tf.truncated_normal_initializer(stddev=0.02))
+    g_w2 = tf.get_variable('g_w2', [3, 3, 1, z_dim / 2], dtype=tf.float32,
+                           initializer=tf.truncated_normal_initializer(stddev=0.02))
+    g_b2 = tf.get_variable('g_b2', [z_dim / 2], initializer=tf.truncated_normal_initializer(stddev=0.02))
     g2 = tf.nn.conv2d(g1, g_w2, strides=[1, 2, 2, 1], padding='SAME')
     g2 = g2 + g_b2
     g2 = tf.contrib.layers.batch_norm(g2, epsilon=1e-5, scope='bn2')
@@ -77,8 +82,9 @@ def generator(z, batch_size, z_dim):
     g2 = tf.image.resize_images(g2, [56, 56])
 
     # Generate 25 features
-    g_w3 = tf.get_variable('g_w3', [3, 3, z_dim/2, z_dim/4], dtype=tf.float32, initializer=tf.truncated_normal_initializer(stddev=0.02))
-    g_b3 = tf.get_variable('g_b3', [z_dim/4], initializer=tf.truncated_normal_initializer(stddev=0.02))
+    g_w3 = tf.get_variable('g_w3', [3, 3, z_dim / 2, z_dim / 4], dtype=tf.float32,
+                           initializer=tf.truncated_normal_initializer(stddev=0.02))
+    g_b3 = tf.get_variable('g_b3', [z_dim / 4], initializer=tf.truncated_normal_initializer(stddev=0.02))
     g3 = tf.nn.conv2d(g2, g_w3, strides=[1, 2, 2, 1], padding='SAME')
     g3 = g3 + g_b3
     g3 = tf.contrib.layers.batch_norm(g3, epsilon=1e-5, scope='bn3')
@@ -86,7 +92,8 @@ def generator(z, batch_size, z_dim):
     g3 = tf.image.resize_images(g3, [56, 56])
 
     # Final convolution with one output channel
-    g_w4 = tf.get_variable('g_w4', [1, 1, z_dim/4, 1], dtype=tf.float32, initializer=tf.truncated_normal_initializer(stddev=0.02))
+    g_w4 = tf.get_variable('g_w4', [1, 1, z_dim / 4, 1], dtype=tf.float32,
+                           initializer=tf.truncated_normal_initializer(stddev=0.02))
     g_b4 = tf.get_variable('g_b4', [1], initializer=tf.truncated_normal_initializer(stddev=0.02))
     g4 = tf.nn.conv2d(g3, g_w4, strides=[1, 2, 2, 1], padding='SAME')
     g4 = g4 + g_b4
@@ -94,6 +101,7 @@ def generator(z, batch_size, z_dim):
 
     # Dimensions of g4: batch_size x 28 x 28 x 1
     return g4
+
 
 def main(server, log_dir, context):
     """ Accept parameters from wrapper script """
@@ -103,23 +111,28 @@ def main(server, log_dir, context):
     z_placeholder = tf.placeholder(tf.float32, [None, z_dimensions], name='z_placeholder')
     # z_placeholder is for feeding input noise to the generator
 
-    x_placeholder = tf.placeholder(tf.float32, shape = [None,28,28,1], name='x_placeholder')
+    x_placeholder = tf.placeholder(tf.float32, shape=[None, 28, 28, 1], name='x_placeholder')
     # x_placeholder is for feeding input images to the discriminator
 
-    Gz = generator(z_placeholder, batch_size, z_dimensions)
-    # Gz holds the generated images
+    with tf.device("/job:worker/task:0"):
+        Gz = generator(z_placeholder, batch_size, z_dimensions)
+        # Gz holds the generated images
 
-    Dx = discriminator(x_placeholder)
-    # Dx will hold discriminator prediction probabilities
-    # for the real MNIST images
+    with tf.device("/job:worker/task:1"):
+        Dx = discriminator(x_placeholder)
+        # Dx will hold discriminator prediction probabilities
+        # for the real MNIST images
 
-    Dg = discriminator(Gz, reuse_variables=True)
-    # Dg will hold discriminator prediction probabilities for generated images
+    with tf.device("/job:worker/task:1"):
+        Dg = discriminator(Gz, reuse_variables=True)
+        # Dg will hold discriminator prediction probabilities for generated images
 
     # Define losses
-    d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits = Dx, labels = tf.ones_like(Dx)))
-    d_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits = Dg, labels = tf.zeros_like(Dg)))
-    g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits = Dg, labels = tf.ones_like(Dg)))
+    with tf.device("/job:worker/task:0"):
+        g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dg, labels=tf.ones_like(Dg)))
+    with tf.device("/job:worker/task:1"):
+        d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dx, labels=tf.ones_like(Dx)))
+        d_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dg, labels=tf.zeros_like(Dg)))
 
     # Define variable lists
     tvars = tf.trainable_variables()
@@ -128,51 +141,55 @@ def main(server, log_dir, context):
 
     # Define the optimizers
     # Train the discriminator
-    d_trainer_fake = tf.train.AdamOptimizer(0.0003).minimize(d_loss_fake, var_list=d_vars)
-    d_trainer_real = tf.train.AdamOptimizer(0.0003).minimize(d_loss_real, var_list=d_vars)
+    with tf.device("/job:worker/task:1"):
+        d_trainer_fake = tf.train.AdamOptimizer(0.0003).minimize(d_loss_fake, var_list=d_vars)
+        d_trainer_real = tf.train.AdamOptimizer(0.0003).minimize(d_loss_real, var_list=d_vars)
 
     # Train the generator
-    g_trainer = tf.train.AdamOptimizer(0.0001).minimize(g_loss, var_list=g_vars)
+    with tf.device("/job:worker/task:0"):
+        g_trainer = tf.train.AdamOptimizer(0.0001).minimize(g_loss, var_list=g_vars)
 
     # From this point forward, reuse variables
     tf.get_variable_scope().reuse_variables()
 
-    sess = tf.Session(target=server.target)
+    is_chief = server.server_def.task_index == 0
+    with tf.train.MonitoredTrainingSession(master=server.target,
+                                           is_chief=is_chief) as sess:
 
-    # Send summary statistics to TensorBoard
-    tf.summary.scalar('Generator_loss', g_loss)
-    tf.summary.scalar('Discriminator_loss_real', d_loss_real)
-    tf.summary.scalar('Discriminator_loss_fake', d_loss_fake)
+        # Send summary statistics to TensorBoard
+        tf.summary.scalar('Generator_loss', g_loss)
+        tf.summary.scalar('Discriminator_loss_real', d_loss_real)
+        tf.summary.scalar('Discriminator_loss_fake', d_loss_fake)
 
-    images_for_tensorboard = generator(z_placeholder, batch_size, z_dimensions)
-    tf.summary.image('Generated_images', images_for_tensorboard, 5)
-    merged = tf.summary.merge_all()
-    writer = tf.summary.FileWriter(log_dir, sess.graph)
+        images_for_tensorboard = generator(z_placeholder, batch_size, z_dimensions)
+        tf.summary.image('Generated_images', images_for_tensorboard, 5)
+        merged = tf.summary.merge_all()
+        writer = tf.summary.FileWriter(log_dir, sess.graph)
 
-    sess.run(tf.global_variables_initializer())
+        sess.run(tf.global_variables_initializer())
 
-    # Pre-train discriminator
-    for i in range(300):
-        z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
-        real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
-        _, __, dLossReal, dLossFake = sess.run([d_trainer_real, d_trainer_fake, d_loss_real, d_loss_fake],
-                                               {x_placeholder: real_image_batch, z_placeholder: z_batch})
-
-    # Train generator and discriminator together
-    for i in range(100000):
-        real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
-        z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
-
-        # Train discriminator on both real and fake images
-        _, __, dLossReal, dLossFake = sess.run([d_trainer_real, d_trainer_fake, d_loss_real, d_loss_fake],
-                                               {x_placeholder: real_image_batch, z_placeholder: z_batch})
-
-        # Train generator
-        z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
-        _ = sess.run(g_trainer, feed_dict={z_placeholder: z_batch})
-
-        if i % 10 == 0:
-            # Update TensorBoard with summary statistics
+        # Pre-train discriminator
+        for i in range(300):
             z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
-            summary = sess.run(merged, {z_placeholder: z_batch, x_placeholder: real_image_batch})
-            writer.add_summary(summary, i)
+            real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
+            _, __, dLossReal, dLossFake = sess.run([d_trainer_real, d_trainer_fake, d_loss_real, d_loss_fake],
+                                                   {x_placeholder: real_image_batch, z_placeholder: z_batch})
+
+        # Train generator and discriminator together
+        for i in range(100000):
+            real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
+            z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
+
+            # Train discriminator on both real and fake images
+            _, __, dLossReal, dLossFake = sess.run([d_trainer_real, d_trainer_fake, d_loss_real, d_loss_fake],
+                                                   {x_placeholder: real_image_batch, z_placeholder: z_batch})
+
+            # Train generator
+            z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
+            _ = sess.run(g_trainer, feed_dict={z_placeholder: z_batch})
+
+            if i % 10 == 0:
+                # Update TensorBoard with summary statistics
+                z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
+                summary = sess.run(merged, {z_placeholder: z_batch, x_placeholder: real_image_batch})
+                writer.add_summary(summary, i)
