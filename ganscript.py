@@ -106,8 +106,14 @@ def generator(z, batch_size, z_dim):
 def main(server, log_dir, context):
     """ Accept parameters from wrapper script """
 
-    z_dimensions = 100
-    batch_size = 50
+    z_dimensions = context.get("z_dimensions") or 100
+    batch_size = context.get("batch_size") or 50
+    g_learning_rate = context.get("g_learning_rate") or 0.0001
+    d_fake_learning_rate = context.get("g_learning_rate") or 0.0003
+    d_real_learning_rate = context.get("g_learning_rate") or 0.0003
+    total_steps = context.get("total_steps") or 100000
+    pre_train_steps = context.get("pre_train_steps") or 1000
+
     z_placeholder = tf.placeholder(tf.float32, [None, z_dimensions], name='z_placeholder')
     # z_placeholder is for feeding input noise to the generator
 
@@ -135,12 +141,12 @@ def main(server, log_dir, context):
     global_step = tf.contrib.framework.get_or_create_global_step()
 
     # Train the generator
-    g_trainer = tf.train.AdamOptimizer(0.0001).minimize(g_loss, var_list=g_vars, global_step=global_step)
+    g_trainer = tf.train.AdamOptimizer(g_learning_rate).minimize(g_loss, var_list=g_vars, global_step=global_step)
 
     # Define the optimizers
     # Train the discriminator
-    d_trainer_fake = tf.train.AdamOptimizer(0.0003).minimize(d_loss_fake, var_list=d_vars, global_step=global_step)
-    d_trainer_real = tf.train.AdamOptimizer(0.0003).minimize(d_loss_real, var_list=d_vars, global_step=global_step)
+    d_trainer_fake = tf.train.AdamOptimizer(d_fake_learning_rate).minimize(d_loss_fake, var_list=d_vars, global_step=global_step)
+    d_trainer_real = tf.train.AdamOptimizer(d_real_learning_rate).minimize(d_loss_real, var_list=d_vars, global_step=global_step)
 
     # From this point forward, reuse variables
     tf.get_variable_scope().reuse_variables()
@@ -154,7 +160,7 @@ def main(server, log_dir, context):
     tf.summary.image('Generated_images', images_for_tensorboard, 5)
     merged = tf.summary.merge_all()
 
-    hooks = [tf.train.StopAtStepHook(last_step=100000)]
+    hooks = [tf.train.StopAtStepHook(last_step=total_steps)]
     is_chief = server.server_def.task_index == 0
     with tf.train.MonitoredTrainingSession(master=server.target,
                                            is_chief=is_chief,
@@ -168,7 +174,7 @@ def main(server, log_dir, context):
         print("Pre-training discriminator...")
 
         # Pre-train discriminator
-        while sess.run(global_step) < 300:
+        while sess.run(global_step) < pre_train_steps:
             z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
             real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
             _, __, dLossReal, dLossFake = sess.run([d_trainer_real, d_trainer_fake, d_loss_real, d_loss_fake],
