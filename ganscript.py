@@ -203,12 +203,14 @@ def main(server, log_dir, context):
             z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
 
             # Train discriminator on both real and fake images
-            _, __, dLossReal, dLossFake = sess.run([d_trainer_real, d_trainer_fake, d_loss_real, d_loss_fake],
-                                                   {x_placeholder: real_image_batch, z_placeholder: z_batch})
+            sess.run([d_trainer_real], {x_placeholder: real_image_batch, z_placeholder: z_batch})
+            sess.run([d_trainer_fake], {x_placeholder: real_image_batch, z_placeholder: z_batch})
+            sess.run([d_loss_real], {x_placeholder: real_image_batch, z_placeholder: z_batch})
+            sess.run([d_loss_fake], {x_placeholder: real_image_batch, z_placeholder: z_batch})
 
             # Train generator
             z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
-            _ = sess.run(g_trainer, feed_dict={z_placeholder: z_batch})
+            sess.run(g_trainer, feed_dict={z_placeholder: z_batch})
 
             if is_chief and (local_step % 10 == 0):
                 # Update TensorBoard with summary statistics
