@@ -198,6 +198,7 @@ def main(server, log_dir, context):
         local_step = 0
         print("Training generator and discriminator together...")
         while not sess.should_stop():
+            print("[step] training... local step {}".format(local_step))
             real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
             z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
 
