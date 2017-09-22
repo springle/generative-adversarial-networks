@@ -186,6 +186,7 @@ def main(server, log_dir, context):
 
         # Pre-train discriminator
         while sess.run(global_step) < pre_train_steps:
+            print("[step] pre-training... global_step={}".format(global_step))
             z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
             real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
             _, __, dLossReal, dLossFake = sess.run([d_trainer_real, d_trainer_fake, d_loss_real, d_loss_fake],
