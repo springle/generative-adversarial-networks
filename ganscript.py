@@ -202,7 +202,7 @@ def main(server, log_dir, context):
 
             # Train generator
             z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
-            sess.run(g_trainer, feed_dict={z_placeholder: z_batch})
+            _ = sess.run(g_trainer, feed_dict={z_placeholder: z_batch})
 
             if is_chief and (local_step % 10 == 0):
                 # Update TensorBoard with summary statistics
