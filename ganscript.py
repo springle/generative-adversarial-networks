@@ -143,17 +143,17 @@ def main(server, log_dir, context):
 
     # Train the generator
     g_opt = tf.train.AdamOptimizer(g_learning_rate)
-    g_opt = tf.train.SyncReplicasOptimizer(g_opt, replicas_to_aggregate=num_workers-1)
+    g_opt = tf.train.SyncReplicasOptimizer(g_opt, replicas_to_aggregate=num_workers-1, use_locking=True)
     g_trainer = g_opt.minimize(g_loss, var_list=g_vars, global_step=global_step)
 
     # Train the fake discriminator
     d_opt_fake = tf.train.AdamOptimizer(d_fake_learning_rate)
-    d_opt_fake = tf.train.SyncReplicasOptimizer(d_opt_fake, replicas_to_aggregate=num_workers-1)
+    d_opt_fake = tf.train.SyncReplicasOptimizer(d_opt_fake, replicas_to_aggregate=num_workers-1, use_locking=True)
     d_trainer_fake = d_opt_fake.minimize(d_loss_fake, var_list=d_vars, global_step=global_step)
 
     # Train the real discriminator
     d_opt_real = tf.train.AdamOptimizer(d_real_learning_rate)
-    d_opt_real = tf.train.SyncReplicasOptimizer(d_opt_real, replicas_to_aggregate=num_workers-1)
+    d_opt_real = tf.train.SyncReplicasOptimizer(d_opt_real, replicas_to_aggregate=num_workers-1, use_locking=True)
     d_trainer_real = d_opt_real.minimize(d_loss_real, var_list=d_vars, global_step=global_step)
 
     # From this point forward, reuse variables
