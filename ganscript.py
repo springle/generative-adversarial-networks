@@ -188,10 +188,8 @@ def main(server, log_dir, context):
                 print("[step] pre-training... global_step={}".format(sess.run(global_step)))
                 z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
                 real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
-                sess.run([d_trainer_real], {x_placeholder: real_image_batch, z_placeholder: z_batch})
-                sess.run([d_trainer_fake], {x_placeholder: real_image_batch, z_placeholder: z_batch})
-                sess.run([d_loss_real], {x_placeholder: real_image_batch, z_placeholder: z_batch})
-                sess.run([d_loss_fake], {x_placeholder: real_image_batch, z_placeholder: z_batch})
+                _, _, dLossReal, dLossFake = sess.run([d_trainer_real, d_trainer_fake, d_loss_real, d_loss_fake],
+                                                      {x_placeholder: real_image_batch, z_placeholder: z_batch})
                 continue
 
             print("[step] training together ... local step {}".format(local_step))
@@ -199,10 +197,8 @@ def main(server, log_dir, context):
             z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
 
             # Train discriminator on both real and fake images
-            sess.run([d_trainer_real], {x_placeholder: real_image_batch, z_placeholder: z_batch})
-            sess.run([d_trainer_fake], {x_placeholder: real_image_batch, z_placeholder: z_batch})
-            sess.run([d_loss_real], {x_placeholder: real_image_batch, z_placeholder: z_batch})
-            sess.run([d_loss_fake], {x_placeholder: real_image_batch, z_placeholder: z_batch})
+            _, _, dLossReal, dLossFake = sess.run([d_trainer_real, d_trainer_fake, d_loss_real, d_loss_fake],
+                                                  {x_placeholder: real_image_batch, z_placeholder: z_batch})
 
             # Train generator
             z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
