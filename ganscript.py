@@ -185,7 +185,7 @@ def main(server, log_dir, context):
 
         local_step = 0
         while sess.run(g_global_step) < 1000000:
-            d_fake_step, d_real_step, g_step = sess.run(d_fake_global_step, d_real_global_step, g_global_step)
+            d_fake_step, d_real_step, g_step = sess.run([d_fake_global_step, d_real_global_step, g_global_step])
             if (d_fake_step < pre_train_steps) and (d_real_step < pre_train_steps):
                 print("[step] pre-training... d_fake_global_step={}, d_real_global_step={}, \
                         g_global_step={}".format(d_fake_step, d_real_step, g_step))
