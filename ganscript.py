@@ -145,17 +145,17 @@ def main(server, log_dir, context):
 
     # Train the generator
     g_opt = tf.train.AdamOptimizer(g_learning_rate)
-    g_opt = tf.train.SyncReplicasOptimizer(g_opt, replicas_to_aggregate=num_workers-1, use_locking=True)
+    g_opt = tf.train.SyncReplicasOptimizer(g_opt, replicas_to_aggregate=num_workers-1)
     g_trainer = g_opt.minimize(g_loss, var_list=g_vars, global_step=g_global_step)
 
     # Train the fake discriminator
     d_opt_fake = tf.train.AdamOptimizer(d_fake_learning_rate)
-    d_opt_fake = tf.train.SyncReplicasOptimizer(d_opt_fake, replicas_to_aggregate=num_workers-1, use_locking=True)
+    d_opt_fake = tf.train.SyncReplicasOptimizer(d_opt_fake, replicas_to_aggregate=num_workers-1)
     d_trainer_fake = d_opt_fake.minimize(d_loss_fake, var_list=d_vars, global_step=d_fake_global_step)
 
     # Train the real discriminator
     d_opt_real = tf.train.AdamOptimizer(d_real_learning_rate)
-    d_opt_real = tf.train.SyncReplicasOptimizer(d_opt_real, replicas_to_aggregate=num_workers-1, use_locking=True)
+    d_opt_real = tf.train.SyncReplicasOptimizer(d_opt_real, replicas_to_aggregate=num_workers-1)
     d_trainer_real = d_opt_real.minimize(d_loss_real, var_list=d_vars, global_step=d_real_global_step)
 
     # From this point forward, reuse variables
@@ -187,8 +187,8 @@ def main(server, log_dir, context):
         while sess.run(g_global_step) < 1000000:
             d_fake_step, d_real_step, g_step = sess.run([d_fake_global_step, d_real_global_step, g_global_step])
             if (d_fake_step < pre_train_steps) and (d_real_step < pre_train_steps):
-                print("[step] pre-training... d_fake_global_step={}, d_real_global_step={}, \
-                        g_global_step={}".format(d_fake_step, d_real_step, g_step))
+                print("[step] pre-training... d_fake_global_step={}, d_real_global_step={}, g_global_step={}".format(
+                    d_fake_step, d_real_step, g_step))
                 z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
                 real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
                 _, _, dLossReal, dLossFake = sess.run([d_trainer_real, d_trainer_fake, d_loss_real, d_loss_fake],
@@ -215,7 +215,7 @@ def main(server, log_dir, context):
                 writer.add_summary(summary, local_step / 10)
 
             if local_step % 50 == 0:
-                print("real training... local_step={}, d_fake_global_step={}, d_real_global_step={}, \
-                        g_global_step={}".format(local_step, d_fake_step, d_real_step, g_step))
+                print("real training... local_step={}, d_fake_global_step={}, d_real_global_step={}, g_global_step={}".format(
+                    local_step, d_fake_step, d_real_step, g_step))
 
             local_step += 1
