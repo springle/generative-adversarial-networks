@@ -187,8 +187,8 @@ def main(server, log_dir, context):
         while sess.run(g_global_step) < 1000000:
             d_fake_step, d_real_step, g_step = sess.run([d_fake_global_step, d_real_global_step, g_global_step])
             if (d_fake_step < pre_train_steps) and (d_real_step < pre_train_steps):
-                print("[step] pre-training... d_fake_global_step={}, d_real_global_step={}, g_global_step={}".format(
-                    d_fake_step, d_real_step, g_step))
+                print("[step] pre-training... local_step={}, d_fake_global_step={}, d_real_global_step={}, "
+                      "g_global_step={}".format(local_step, d_fake_step, d_real_step, g_step))
                 z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
                 real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
                 _, _, dLossReal, dLossFake = sess.run([d_trainer_real, d_trainer_fake, d_loss_real, d_loss_fake],
@@ -215,7 +215,7 @@ def main(server, log_dir, context):
                 writer.add_summary(summary, local_step / 10)
 
             if local_step % 50 == 0:
-                print("real training... local_step={}, d_fake_global_step={}, d_real_global_step={}, g_global_step={}".format(
-                    local_step, d_fake_step, d_real_step, g_step))
+                print("real training... local_step={}, d_fake_global_step={}, d_real_global_step={}, "
+                      "g_global_step={}".format(local_step, d_fake_step, d_real_step, g_step))
 
             local_step += 1
