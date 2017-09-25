@@ -145,19 +145,20 @@ def main(server, log_dir, context):
 
     # Train the generator
     g_opt = tf.train.AdamOptimizer(g_learning_rate)
-    g_opt = tf.train.SyncReplicasOptimizer(g_opt, replicas_to_aggregate=num_workers-2, total_num_replicas=num_workers-1)
+    # g_opt = tf.train.SyncReplicasOptimizer(g_opt, replicas_to_aggregate=num_workers-2,
+    #                                       total_num_replicas=num_workers-1)
     g_trainer = g_opt.minimize(g_loss, var_list=g_vars, global_step=g_global_step)
 
     # Train the fake discriminator
     d_opt_fake = tf.train.AdamOptimizer(d_fake_learning_rate)
-    d_opt_fake = tf.train.SyncReplicasOptimizer(d_opt_fake, replicas_to_aggregate=num_workers-2,
-                                                total_num_replicas=num_workers-1)
+    # d_opt_fake = tf.train.SyncReplicasOptimizer(d_opt_fake, replicas_to_aggregate=num_workers-2,
+    #                                            total_num_replicas=num_workers-1)
     d_trainer_fake = d_opt_fake.minimize(d_loss_fake, var_list=d_vars, global_step=d_fake_global_step)
 
     # Train the real discriminator
     d_opt_real = tf.train.AdamOptimizer(d_real_learning_rate)
-    d_opt_real = tf.train.SyncReplicasOptimizer(d_opt_real, replicas_to_aggregate=num_workers-2,
-                                                total_num_replicas=num_workers-1)
+    # d_opt_real = tf.train.SyncReplicasOptimizer(d_opt_real, replicas_to_aggregate=num_workers-2,
+    #                                            total_num_replicas=num_workers-1)
     d_trainer_real = d_opt_real.minimize(d_loss_real, var_list=d_vars, global_step=d_real_global_step)
 
     # From this point forward, reuse variables
@@ -173,9 +174,10 @@ def main(server, log_dir, context):
     merged = tf.summary.merge_all()
 
     is_chief = server.server_def.task_index == 0
-    hooks = [g_opt.make_session_run_hook(is_chief),
-             d_opt_fake.make_session_run_hook(is_chief),
-             d_opt_real.make_session_run_hook(is_chief)]
+    # hooks = [g_opt.make_session_run_hook(is_chief),
+    #          d_opt_fake.make_session_run_hook(is_chief),
+    #          d_opt_real.make_session_run_hook(is_chief)]
+    hooks = []
     with tf.train.MonitoredTrainingSession(master=server.target,
                                            is_chief=is_chief,
                                            hooks=hooks) as sess:
