@@ -114,6 +114,7 @@ def main(server, log_dir, context):
     total_steps = context.get("total_steps") or 100000
     pre_train_steps = context.get("pre_train_steps") or 1000
     num_workers = len(server.server_def.cluster.job[1].tasks)
+    beta1 = context.get("beta1") or 0.5
 
     z_placeholder = tf.placeholder(tf.float32, [None, z_dimensions], name='z_placeholder')
     # z_placeholder is for feeding input noise to the generator
@@ -144,19 +145,19 @@ def main(server, log_dir, context):
     d_real_global_step = tf.Variable(0, trainable=False, name='d_real_global_step')
 
     # Train the generator
-    g_opt = tf.train.AdamOptimizer(g_learning_rate)
+    g_opt = tf.train.AdamOptimizer(g_learning_rate, beta1=beta1)
     # g_opt = tf.train.SyncReplicasOptimizer(g_opt, replicas_to_aggregate=num_workers-2,
     #                                       total_num_replicas=num_workers-1)
     g_trainer = g_opt.minimize(g_loss, var_list=g_vars, global_step=g_global_step)
 
     # Train the fake discriminator
-    d_opt_fake = tf.train.AdamOptimizer(d_fake_learning_rate)
+    d_opt_fake = tf.train.AdamOptimizer(d_fake_learning_rate, beta1=beta1)
     # d_opt_fake = tf.train.SyncReplicasOptimizer(d_opt_fake, replicas_to_aggregate=num_workers-2,
     #                                            total_num_replicas=num_workers-1)
     d_trainer_fake = d_opt_fake.minimize(d_loss_fake, var_list=d_vars, global_step=d_fake_global_step)
 
     # Train the real discriminator
-    d_opt_real = tf.train.AdamOptimizer(d_real_learning_rate)
+    d_opt_real = tf.train.AdamOptimizer(d_real_learning_rate, beta1=beta1)
     # d_opt_real = tf.train.SyncReplicasOptimizer(d_opt_real, replicas_to_aggregate=num_workers-2,
     #                                            total_num_replicas=num_workers-1)
     d_trainer_real = d_opt_real.minimize(d_loss_real, var_list=d_vars, global_step=d_real_global_step)
@@ -213,7 +214,7 @@ def main(server, log_dir, context):
 
             if is_chief and (local_step % 10 == 0):
                 # Update TensorBoard with summary statistics
-                print("Saving summary {}".format(str(local_step / 10)))
+                print("Saving summary {}".format(d_fake_step))
                 z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
                 summary = sess.run(merged, {z_placeholder: z_batch, x_placeholder: real_image_batch})
                 writer.add_summary(summary, d_fake_step)
