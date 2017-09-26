@@ -115,6 +115,7 @@ def main(server, log_dir, context):
     pre_train_steps = context.get("pre_train_steps") or 1000
     num_workers = len(server.server_def.cluster.job[1].tasks)
     beta1 = context.get("beta1") or 0.5
+    beta2 = context.get("beta2") or 0.999
 
     z_placeholder = tf.placeholder(tf.float32, [None, z_dimensions], name='z_placeholder')
     # z_placeholder is for feeding input noise to the generator
@@ -140,27 +141,25 @@ def main(server, log_dir, context):
     d_vars = [var for var in tvars if 'd_' in var.name]
     g_vars = [var for var in tvars if 'g_' in var.name]
 
-    g_global_step = tf.Variable(0, trainable=False, name='g_global_step')
-    d_fake_global_step = tf.Variable(0, trainable=False, name='d_fake_global_step')
-    d_real_global_step = tf.Variable(0, trainable=False, name='d_real_global_step')
+    global_step = tf.Variable(0, trainable=False, name='g_global_step')
 
     # Train the generator
-    g_opt = tf.train.AdamOptimizer(g_learning_rate, beta1=beta1)
+    g_opt = tf.train.AdamOptimizer(g_learning_rate, beta1=beta1, beta2=beta2, use_locking=True)
     # g_opt = tf.train.SyncReplicasOptimizer(g_opt, replicas_to_aggregate=num_workers-2,
     #                                       total_num_replicas=num_workers-1)
-    g_trainer = g_opt.minimize(g_loss, var_list=g_vars, global_step=g_global_step)
+    g_trainer = g_opt.minimize(g_loss, var_list=g_vars, global_step=global_step)
 
     # Train the fake discriminator
-    d_opt_fake = tf.train.AdamOptimizer(d_fake_learning_rate, beta1=beta1)
+    d_opt_fake = tf.train.AdamOptimizer(d_fake_learning_rate, beta1=beta1, beta2=beta2, use_locking=True)
     # d_opt_fake = tf.train.SyncReplicasOptimizer(d_opt_fake, replicas_to_aggregate=num_workers-2,
     #                                            total_num_replicas=num_workers-1)
-    d_trainer_fake = d_opt_fake.minimize(d_loss_fake, var_list=d_vars, global_step=d_fake_global_step)
+    d_trainer_fake = d_opt_fake.minimize(d_loss_fake, var_list=d_vars, global_step=global_step)
 
     # Train the real discriminator
-    d_opt_real = tf.train.AdamOptimizer(d_real_learning_rate, beta1=beta1)
+    d_opt_real = tf.train.AdamOptimizer(d_real_learning_rate, beta1=beta1, beta2=beta2, use_locking=True)
     # d_opt_real = tf.train.SyncReplicasOptimizer(d_opt_real, replicas_to_aggregate=num_workers-2,
     #                                            total_num_replicas=num_workers-1)
-    d_trainer_real = d_opt_real.minimize(d_loss_real, var_list=d_vars, global_step=d_real_global_step)
+    d_trainer_real = d_opt_real.minimize(d_loss_real, var_list=d_vars, global_step=global_step)
 
     # From this point forward, reuse variables
     tf.get_variable_scope().reuse_variables()
@@ -175,13 +174,8 @@ def main(server, log_dir, context):
     merged = tf.summary.merge_all()
 
     is_chief = server.server_def.task_index == 0
-    # hooks = [g_opt.make_session_run_hook(is_chief),
-    #          d_opt_fake.make_session_run_hook(is_chief),
-    #          d_opt_real.make_session_run_hook(is_chief)]
-    hooks = []
     with tf.train.MonitoredTrainingSession(master=server.target,
-                                           is_chief=is_chief,
-                                           hooks=hooks) as sess:
+                                           is_chief=is_chief) as sess:
 
         if is_chief:
             print("I am the chief!")
@@ -189,11 +183,9 @@ def main(server, log_dir, context):
             writer = tf.summary.FileWriter(log_dir, sess.graph)
 
         local_step = 0
-        while sess.run(g_global_step) < 1000000:
-            d_fake_step, d_real_step, g_step = sess.run([d_fake_global_step, d_real_global_step, g_global_step])
-            if (d_fake_step < pre_train_steps) and (d_real_step < pre_train_steps):
-                print("[step] pre-training... local_step={}, d_fake_global_step={}, d_real_global_step={}, "
-                      "g_global_step={}".format(local_step, d_fake_step, d_real_step, g_step))
+        while tf.train.global_step(sess, global_step) < 1000000:
+            gstep = tf.train.global_step(sess, global_step)
+            if gstep < pre_train_steps:
                 z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
                 real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
                 _, _, dLossReal, dLossFake = sess.run([d_trainer_real, d_trainer_fake, d_loss_real, d_loss_fake],
@@ -212,15 +204,11 @@ def main(server, log_dir, context):
             z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
             _ = sess.run(g_trainer, feed_dict={z_placeholder: z_batch})
 
-            if is_chief and (local_step % 10 == 0):
+            if is_chief and (local_step % 100 == 0):
                 # Update TensorBoard with summary statistics
-                print("Saving summary {}".format(d_fake_step))
+                print("Saving summary at global step {} (local step {})".format(gstep, local_step))
                 z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
                 summary = sess.run(merged, {z_placeholder: z_batch, x_placeholder: real_image_batch})
-                writer.add_summary(summary, d_fake_step)
-
-            if local_step % 50 == 0:
-                print("training together... local_step={}, d_fake_global_step={}, d_real_global_step={}, "
-                      "g_global_step={}".format(local_step, d_fake_step, d_real_step, g_step))
+                writer.add_summary(summary, gstep)
 
             local_step += 1
