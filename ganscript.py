@@ -143,19 +143,19 @@ def main(server, log_dir, context):
     global_step = tf.Variable(0, trainable=False, name='g_global_step')
 
     # Train the generator
-    g_opt = tf.train.AdamOptimizer(g_learning_rate, beta1=beta1, beta2=beta2, use_locking=True)
+    g_opt = tf.train.AdamOptimizer(g_learning_rate, beta1=beta1, beta2=beta2)
     # g_opt = tf.train.SyncReplicasOptimizer(g_opt, replicas_to_aggregate=num_workers-2,
     #                                       total_num_replicas=num_workers-1)
     g_trainer = g_opt.minimize(g_loss, var_list=g_vars, global_step=global_step)
 
     # Train the fake discriminator
-    d_opt_fake = tf.train.AdamOptimizer(d_fake_learning_rate, beta1=beta1, beta2=beta2, use_locking=True)
+    d_opt_fake = tf.train.AdamOptimizer(d_fake_learning_rate, beta1=beta1, beta2=beta2)
     # d_opt_fake = tf.train.SyncReplicasOptimizer(d_opt_fake, replicas_to_aggregate=num_workers-2,
     #                                            total_num_replicas=num_workers-1)
     d_trainer_fake = d_opt_fake.minimize(d_loss_fake, var_list=d_vars, global_step=global_step)
 
     # Train the real discriminator
-    d_opt_real = tf.train.AdamOptimizer(d_real_learning_rate, beta1=beta1, beta2=beta2, use_locking=True)
+    d_opt_real = tf.train.AdamOptimizer(d_real_learning_rate, beta1=beta1, beta2=beta2)
     # d_opt_real = tf.train.SyncReplicasOptimizer(d_opt_real, replicas_to_aggregate=num_workers-2,
     #                                            total_num_replicas=num_workers-1)
     d_trainer_real = d_opt_real.minimize(d_loss_real, var_list=d_vars, global_step=global_step)
