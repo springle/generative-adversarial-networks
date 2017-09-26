@@ -188,7 +188,7 @@ def main(server, log_dir, context):
                 real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
                 _, _, dLossReal, dLossFake = sess.run([d_trainer_real, d_trainer_fake, d_loss_real, d_loss_fake],
                                                       {x_placeholder: real_image_batch, z_placeholder: z_batch})
-                local_step += 1
+                local_step += 2
                 continue
 
             real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
@@ -209,4 +209,4 @@ def main(server, log_dir, context):
                 summary = sess.run(merged, {z_placeholder: z_batch, x_placeholder: real_image_batch})
                 writer.add_summary(summary, gstep)
 
-            local_step += 1
+            local_step += 3
