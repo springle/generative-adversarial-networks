@@ -116,6 +116,7 @@ def main(server, log_dir, context):
     num_workers = len(server.server_def.cluster.job[1].tasks)
     beta1 = context.get("beta1") or 0.5
     beta2 = context.get("beta2") or 0.999
+    run_name = context.get("run_name") or datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
     z_placeholder = tf.placeholder(tf.float32, [None, z_dimensions], name='z_placeholder')
     # z_placeholder is for feeding input noise to the generator
@@ -178,8 +179,7 @@ def main(server, log_dir, context):
                                            is_chief=is_chief) as sess:
 
         if is_chief:
-            print("I am the chief!")
-            print("Creating writer")
+            log_dir = log_dir + "/" + run_name + "/"
             writer = tf.summary.FileWriter(log_dir, sess.graph)
 
         local_step = 0
