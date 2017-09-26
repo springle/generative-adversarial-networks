@@ -112,7 +112,7 @@ def main(server, log_dir, context):
     d_fake_learning_rate = context.get("g_learning_rate") or 0.0003
     d_real_learning_rate = context.get("g_learning_rate") or 0.0003
     pre_train_steps = context.get("pre_train_steps") or 1000
-    beta1 = context.get("beta1") or 0.5
+    beta1 = context.get("beta1") or 0.9
     beta2 = context.get("beta2") or 0.999
     run_name = context.get("run_name") or datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
