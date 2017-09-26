@@ -111,9 +111,7 @@ def main(server, log_dir, context):
     g_learning_rate = context.get("g_learning_rate") or 0.0001
     d_fake_learning_rate = context.get("g_learning_rate") or 0.0003
     d_real_learning_rate = context.get("g_learning_rate") or 0.0003
-    total_steps = context.get("total_steps") or 100000
     pre_train_steps = context.get("pre_train_steps") or 1000
-    num_workers = len(server.server_def.cluster.job[1].tasks)
     beta1 = context.get("beta1") or 0.5
     beta2 = context.get("beta2") or 0.999
     run_name = context.get("run_name") or datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
