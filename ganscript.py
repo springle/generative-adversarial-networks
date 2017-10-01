@@ -204,14 +204,13 @@ def main(server, log_dir, context):
                     d_real_grad = d_opt_real.compute_gradients(d_loss_real, var_list=d_vars)
                     d_reals.append(d_real_grad)
 
-                    if not i:
-                        # Send summary statistics to TensorBoard
-                        tf.summary.scalar('Generator_loss', g_loss)
-                        tf.summary.scalar('Discriminator_loss_real', d_loss_real)
-                        tf.summary.scalar('Discriminator_loss_fake', d_loss_fake)
+                    # Send summary statistics to TensorBoard
+                    tf.summary.scalar('Generator_loss', g_loss)
+                    tf.summary.scalar('Discriminator_loss_real', d_loss_real)
+                    tf.summary.scalar('Discriminator_loss_fake', d_loss_fake)
 
-                        images_for_tensorboard = generator(z_placeholder, batch_size, z_dimensions)
-                        tf.summary.image('Generated_images', images_for_tensorboard, 5)
+                    images_for_tensorboard = generator(z_placeholder, batch_size, z_dimensions)
+                    tf.summary.image('Generated_images', images_for_tensorboard, 5)
 
     merged = tf.summary.merge_all()
 
@@ -241,23 +240,26 @@ def main(server, log_dir, context):
         while tf.train.global_step(sess, global_step) < 1000000:
             gstep = tf.train.global_step(sess, global_step)
 
-            # Train discriminator
-            real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
-            z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
-            sess.run([d_real_train_op, d_fake_train_op],
-                     feed_dict={x_placeholder: real_image_batch, z_placeholder: z_batch})
+            # The Chief Worker is responsible for starting tasks
+            if is_chief:
 
-            if gstep > pre_train_steps:
-                # Train generator
+                # Train discriminator
+                real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
                 z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
-                sess.run([g_train_op],
-                         feed_dict={z_placeholder: z_batch})
+                sess.run([d_real_train_op, d_fake_train_op],
+                         feed_dict={x_placeholder: real_image_batch, z_placeholder: z_batch})
 
-            if is_chief and (local_step % 100 == 0):
-                # Update TensorBoard with summary statistics
-                print("Saving summary at global step {} (local step {})".format(gstep, local_step))
-                z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
-                summary = sess.run(merged, {z_placeholder: z_batch, x_placeholder: real_image_batch})
-                writer.add_summary(summary, gstep)
+                if gstep > pre_train_steps:
+                    # Train generator
+                    z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
+                    sess.run([g_train_op],
+                             feed_dict={z_placeholder: z_batch})
+
+                if local_step % 100 == 0:
+                    # Update TensorBoard with summary statistics
+                    print("Saving summary at global step {} (local step {})".format(gstep, local_step))
+                    z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
+                    summary = sess.run(merged, {z_placeholder: z_batch, x_placeholder: real_image_batch})
+                    writer.add_summary(summary, gstep)
 
             local_step += 1
