@@ -173,7 +173,7 @@ def main(server, log_dir, context):
     with tf.variable_scope(tf.get_variable_scope()):
         for i in xrange(num_workers):
             with tf.device("/job:worker/task:%d" % i):
-                with tf.name_scope("worker_%d" % task_index) as scope:
+                with tf.name_scope("worker_%d" % i) as scope:
 
                     # Define generator
                     Gz = generator(z_placeholder, batch_size, z_dimensions)
