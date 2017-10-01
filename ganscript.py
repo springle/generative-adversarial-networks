@@ -23,6 +23,44 @@ from tensorflow.examples.tutorials.mnist import input_data
 mnist = input_data.read_data_sets("MNIST_data/")
 
 
+def average_gradients(tower_grads):
+    """Calculate the average gradient for each shared variable across all towers.
+    Note that this function provides a synchronization point across all towers.
+    Args:
+        tower_grads:
+            List of lists of (gradient, variable) tuples. The outer list
+            is over individual gradients. The inner list is over the gradient
+            calculation for each tower.
+    Returns:
+         List of pairs of (gradient, variable) where the gradient has been averaged
+         across all towers.
+    """
+
+    average_grads = []
+    for grad_and_vars in zip(*tower_grads):
+        # Note that each grad_and_vars looks like the following:
+        #   ((grad0_gpu0, var0_gpu0), ... , (grad0_gpuN, var0_gpuN))
+        grads = []
+        for g, _ in grad_and_vars:
+            # Add 0 dimension to the gradients to represent the tower.
+            expanded_g = tf.expand_dims(g, 0)
+
+            # Append on a 'tower' dimension which we will average over below.
+            grads.append(expanded_g)
+
+        # Average over the 'tower' dimension.
+        grad = tf.concat(0, grads)
+        grad = tf.reduce_mean(grad, 0)
+
+        # Keep in mind that the Variables are redundant because they are shared
+        # across towers. So .. we will just return the first tower's pointer to
+        # the Variable.
+        v = grad_and_vars[0][1]
+        grad_and_var = (grad, v)
+        average_grads.append(grad_and_var)
+    return average_grads
+
+
 # Define the discriminator network
 def discriminator(images, reuse_variables=None):
     with tf.variable_scope(tf.get_variable_scope(), reuse=reuse_variables) as scope:
@@ -115,63 +153,79 @@ def main(server, log_dir, context):
     beta1 = context.get("beta1") or 0.9
     beta2 = context.get("beta2") or 0.999
     run_name = context.get("run_name") or datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    num_gpus = server.server_def.default_session_config.device_count["GPU"]
+
+    task_index = server.server_def.task_index
     if len(server.server_def.cluster.job) > 1:
         num_workers = len(server.server_def.cluster.job[1].tasks)
     else:
         num_workers = len(server.server_def.cluster.job[0].tasks)
 
-    for i in xrange(num_workers):
-        with tf.device("/job:worker/task:%d" % i):
-            z_placeholder = tf.placeholder(tf.float32, [None, z_dimensions], name='z_placeholder')
-            # z_placeholder is for feeding input noise to the generator
+    global_step = tf.Variable(0, trainable=False, name='global_step')
+    g_opt = tf.train.AdamOptimizer(g_learning_rate, beta1=beta1, beta2=beta2)
+    d_opt_fake = tf.train.AdamOptimizer(d_fake_learning_rate, beta1=beta1, beta2=beta2)
+    d_opt_real = tf.train.AdamOptimizer(d_real_learning_rate, beta1=beta1, beta2=beta2)
 
-            x_placeholder = tf.placeholder(tf.float32, shape=[None, 28, 28, 1], name='x_placeholder')
-            # x_placeholder is for feeding input images to the discriminator
+    gs = []
+    d_fakes = []
+    d_reals = []
+    with tf.variable_scope(tf.get_variable_scope()):
+        for i in xrange(num_workers):
+            with tf.device("/job:worker/task:%d" % i):
+                with tf.name_scope("worker_%d" % task_index) as scope:
+                    z_placeholder = tf.placeholder(tf.float32, [None, z_dimensions], name='z_placeholder')
+                    x_placeholder = tf.placeholder(tf.float32, shape=[None, 28, 28, 1], name='x_placeholder')
 
-            Gz = generator(z_placeholder, batch_size, z_dimensions)
-            # Gz holds the generated images
+                    Gz = generator(z_placeholder, batch_size, z_dimensions)
+                    Dx = discriminator(x_placeholder)
+                    d_loss_real = tf.reduce_mean(
+                        tf.nn.sigmoid_cross_entropy_with_logits(logits=Dx, labels=tf.ones_like(Dx)))
 
-            Dx = discriminator(x_placeholder)
-            d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dx, labels=tf.ones_like(Dx)))
-            # Dx will hold discriminator prediction probabilities
-            # for the real MNIST images
+                    Dg = discriminator(Gz, reuse_variables=True)
+                    d_loss_fake = tf.reduce_mean(
+                        tf.nn.sigmoid_cross_entropy_with_logits(logits=Dg, labels=tf.zeros_like(Dg)))
+                    g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dg, labels=tf.ones_like(Dg)))
 
-            Dg = discriminator(Gz, reuse_variables=True)
-            d_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dg, labels=tf.zeros_like(Dg)))
-            g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dg, labels=tf.ones_like(Dg)))
-            # Dg will hold discriminator prediction probabilities for generated images
+                    # Reuse variables for next worker
+                    tf.get_variable_scope().reuse_variables()
 
-            # Define variable lists
-            tvars = tf.trainable_variables()
-            d_vars = [var for var in tvars if 'd_' in var.name]
-            g_vars = [var for var in tvars if 'g_' in var.name]
+                    # Define variable lists
+                    tvars = tf.trainable_variables()
+                    d_vars = [var for var in tvars if 'd_' in var.name]
+                    g_vars = [var for var in tvars if 'g_' in var.name]
 
-            global_step = tf.Variable(0, trainable=False, name='g_global_step')
+                    g_grad = g_opt.compute_gradients(g_loss, var_list=g_vars)
+                    gs.append(g_grad)
 
-            # Train the generator
-            g_opt = tf.train.AdamOptimizer(g_learning_rate, beta1=beta1, beta2=beta2)
-            g_trainer = g_opt.minimize(g_loss, var_list=g_vars, global_step=global_step)
+                    d_fake_grad = d_opt_fake.compute_gradients(d_loss_fake, var_list=d_vars)
+                    d_fakes.append(d_fake_grad)
 
-            # Train the fake discriminator
-            d_opt_fake = tf.train.AdamOptimizer(d_fake_learning_rate, beta1=beta1, beta2=beta2)
-            d_trainer_fake = d_opt_fake.minimize(d_loss_fake, var_list=d_vars, global_step=global_step)
+                    d_real_grad = d_opt_real.compute_gradients(d_loss_real, var_list=d_vars)
+                    d_reals.append(d_real_grad)
 
-            # Train the real discriminator
-            d_opt_real = tf.train.AdamOptimizer(d_real_learning_rate, beta1=beta1, beta2=beta2)
-            d_trainer_real = d_opt_real.minimize(d_loss_real, var_list=d_vars, global_step=global_step)
+                    # Send summary statistics to TensorBoard
+                    tf.summary.scalar('Generator_loss', g_loss)
+                    tf.summary.scalar('Discriminator_loss_real', d_loss_real)
+                    tf.summary.scalar('Discriminator_loss_fake', d_loss_fake)
 
-    # From this point forward, reuse variables
-    tf.get_variable_scope().reuse_variables()
+                    images_for_tensorboard = generator(z_placeholder, batch_size, z_dimensions)
+                    tf.summary.image('Generated_images', images_for_tensorboard, 5)
 
-    # Send summary statistics to TensorBoard
-    tf.summary.scalar('Generator_loss', g_loss)
-    tf.summary.scalar('Discriminator_loss_real', d_loss_real)
-    tf.summary.scalar('Discriminator_loss_fake', d_loss_fake)
-
-    images_for_tensorboard = generator(z_placeholder, batch_size, z_dimensions)
-    tf.summary.image('Generated_images', images_for_tensorboard, 5)
     merged = tf.summary.merge_all()
+
+    g_grads = average_gradients(gs)
+    d_fake_grads = average_gradients(d_fakes)
+    d_real_grads = average_gradients(d_reals)
+
+    g_train = g_opt.apply_gradients(g_grads, global_step)
+    d_fake_train = d_opt_fake.apply_gradients(d_fake_grads, global_step)
+    d_real_train = d_opt_fake.apply_gradients(d_real_grads, global_step)
+
+    var_avgs = tf.train.ExponentialMovingAverage(0.999, global_step)
+    var_avgs_op = var_avgs.apply(tf.trainable_variables())
+
+    g_train_op = tf.group(g_train, var_avgs_op)
+    d_fake_train_op = tf.group(d_fake_train, var_avgs_op)
+    d_real_train_op = tf.group(d_real_train, var_avgs_op)
 
     is_chief = server.server_def.task_index == 0
     with tf.train.MonitoredTrainingSession(master=server.target,
@@ -184,24 +238,15 @@ def main(server, log_dir, context):
         local_step = 0
         while tf.train.global_step(sess, global_step) < 1000000:
             gstep = tf.train.global_step(sess, global_step)
-            if gstep < pre_train_steps:
-                z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
-                real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
-                _, _, dLossReal, dLossFake = sess.run([d_trainer_real, d_trainer_fake, d_loss_real, d_loss_fake],
-                                                      {x_placeholder: real_image_batch, z_placeholder: z_batch})
-                local_step += 2
-                continue
 
+            # Train discriminator
             real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
             z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
-
-            # Train discriminator on both real and fake images
-            _, _, dLossReal, dLossFake = sess.run([d_trainer_real, d_trainer_fake, d_loss_real, d_loss_fake],
-                                                  {x_placeholder: real_image_batch, z_placeholder: z_batch})
+            sess.run([d_real_train_op, d_fake_train_op], {x_placeholder: real_image_batch, z_placeholder: z_batch})
 
             # Train generator
             z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
-            _ = sess.run(g_trainer, feed_dict={z_placeholder: z_batch})
+            sess.run(g_train_op, feed_dict={z_placeholder: z_batch})
 
             if is_chief and (local_step % 100 == 0):
                 # Update TensorBoard with summary statistics
@@ -210,4 +255,4 @@ def main(server, log_dir, context):
                 summary = sess.run(merged, {z_placeholder: z_batch, x_placeholder: real_image_batch})
                 writer.add_summary(summary, gstep)
 
-            local_step += 3
+            local_step += 1
