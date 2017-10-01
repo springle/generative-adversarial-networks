@@ -164,6 +164,9 @@ def main(server, log_dir, context):
     d_opt_fake = tf.train.AdamOptimizer(d_fake_learning_rate, beta1=beta1, beta2=beta2)
     d_opt_real = tf.train.AdamOptimizer(d_real_learning_rate, beta1=beta1, beta2=beta2)
 
+    z_placeholder = tf.placeholder(tf.float32, [None, z_dimensions], name='z_placeholder')
+    x_placeholder = tf.placeholder(tf.float32, shape=[None, 28, 28, 1], name='x_placeholder')
+
     gs = []
     d_fakes = []
     d_reals = []
@@ -171,14 +174,14 @@ def main(server, log_dir, context):
         for i in xrange(num_workers):
             with tf.device("/job:worker/task:%d" % i):
                 with tf.name_scope("worker_%d" % task_index) as scope:
-                    z_placeholder = tf.placeholder(tf.float32, [None, z_dimensions], name='z_placeholder')
-                    x_placeholder = tf.placeholder(tf.float32, shape=[None, 28, 28, 1], name='x_placeholder')
 
+                    # Define generator
                     Gz = generator(z_placeholder, batch_size, z_dimensions)
                     Dx = discriminator(x_placeholder)
+
+                    # Define discriminator
                     d_loss_real = tf.reduce_mean(
                         tf.nn.sigmoid_cross_entropy_with_logits(logits=Dx, labels=tf.ones_like(Dx)))
-
                     Dg = discriminator(Gz, reuse_variables=True)
                     d_loss_fake = tf.reduce_mean(
                         tf.nn.sigmoid_cross_entropy_with_logits(logits=Dg, labels=tf.zeros_like(Dg)))
@@ -240,11 +243,13 @@ def main(server, log_dir, context):
             # Train discriminator
             real_image_batch = mnist.train.next_batch(batch_size)[0].reshape([batch_size, 28, 28, 1])
             z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
-            sess.run([d_real_train_op, d_fake_train_op], {x_placeholder: real_image_batch, z_placeholder: z_batch})
+            sess.run([d_real_train_op, d_fake_train_op],
+                     feed_dict={x_placeholder: real_image_batch, z_placeholder: z_batch})
 
             # Train generator
             z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
-            sess.run(g_train_op, feed_dict={z_placeholder: z_batch})
+            sess.run([g_train_op],
+                     feed_dict={z_placeholder: z_batch})
 
             if is_chief and (local_step % 100 == 0):
                 # Update TensorBoard with summary statistics
