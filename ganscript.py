@@ -146,6 +146,7 @@ def main(server, log_dir, context):
 
     z_dimensions = context.get("z_dimensions") or 100
     batch_size = context.get("batch_size") or 50
+    pre_train_steps = context.get("pre_train_steps") or 300
     g_learning_rate = context.get("g_learning_rate") or 0.0001
     d_fake_learning_rate = context.get("g_learning_rate") or 0.0003
     d_real_learning_rate = context.get("g_learning_rate") or 0.0003
@@ -153,7 +154,6 @@ def main(server, log_dir, context):
     beta2 = context.get("beta2") or 0.999
     run_name = context.get("run_name") or datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
-    task_index = server.server_def.task_index
     if len(server.server_def.cluster.job) > 1:
         num_workers = len(server.server_def.cluster.job[1].tasks)
     else:
@@ -204,13 +204,14 @@ def main(server, log_dir, context):
                     d_real_grad = d_opt_real.compute_gradients(d_loss_real, var_list=d_vars)
                     d_reals.append(d_real_grad)
 
-                    # Send summary statistics to TensorBoard
-                    tf.summary.scalar('Generator_loss', g_loss)
-                    tf.summary.scalar('Discriminator_loss_real', d_loss_real)
-                    tf.summary.scalar('Discriminator_loss_fake', d_loss_fake)
+                    if not i:
+                        # Send summary statistics to TensorBoard
+                        tf.summary.scalar('Generator_loss', g_loss)
+                        tf.summary.scalar('Discriminator_loss_real', d_loss_real)
+                        tf.summary.scalar('Discriminator_loss_fake', d_loss_fake)
 
-                    images_for_tensorboard = generator(z_placeholder, batch_size, z_dimensions)
-                    tf.summary.image('Generated_images', images_for_tensorboard, 5)
+                        images_for_tensorboard = generator(z_placeholder, batch_size, z_dimensions)
+                        tf.summary.image('Generated_images', images_for_tensorboard, 5)
 
     merged = tf.summary.merge_all()
 
@@ -218,16 +219,16 @@ def main(server, log_dir, context):
     d_fake_grads = average_gradients(d_fakes)
     d_real_grads = average_gradients(d_reals)
 
-    g_train = g_opt.apply_gradients(g_grads, global_step)
-    d_fake_train = d_opt_fake.apply_gradients(d_fake_grads, global_step)
-    d_real_train = d_opt_fake.apply_gradients(d_real_grads, global_step)
+    g_train_op = g_opt.apply_gradients(g_grads, global_step)
+    d_fake_train_op = d_opt_fake.apply_gradients(d_fake_grads, global_step)
+    d_real_train_op = d_opt_fake.apply_gradients(d_real_grads, global_step)
 
-    var_avgs = tf.train.ExponentialMovingAverage(0.999, global_step)
-    var_avgs_op = var_avgs.apply(tf.trainable_variables())
+    # var_avgs = tf.train.ExponentialMovingAverage(0.999, global_step)
+    # var_avgs_op = var_avgs.apply(tf.trainable_variables())
 
-    g_train_op = tf.group(g_train, var_avgs_op)
-    d_fake_train_op = tf.group(d_fake_train, var_avgs_op)
-    d_real_train_op = tf.group(d_real_train, var_avgs_op)
+    # g_train_op = tf.group(g_train, var_avgs_op)
+    # d_fake_train_op = tf.group(d_fake_train, var_avgs_op)
+    # d_real_train_op = tf.group(d_real_train, var_avgs_op)
 
     is_chief = server.server_def.task_index == 0
     with tf.train.MonitoredTrainingSession(master=server.target,
@@ -246,10 +247,11 @@ def main(server, log_dir, context):
             sess.run([d_real_train_op, d_fake_train_op],
                      feed_dict={x_placeholder: real_image_batch, z_placeholder: z_batch})
 
-            # Train generator
-            z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
-            sess.run([g_train_op],
-                     feed_dict={z_placeholder: z_batch})
+            if gstep > pre_train_steps:
+                # Train generator
+                z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
+                sess.run([g_train_op],
+                         feed_dict={z_placeholder: z_batch})
 
             if is_chief and (local_step % 100 == 0):
                 # Update TensorBoard with summary statistics
