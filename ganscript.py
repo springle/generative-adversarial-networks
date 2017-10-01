@@ -115,50 +115,51 @@ def main(server, log_dir, context):
     beta1 = context.get("beta1") or 0.9
     beta2 = context.get("beta2") or 0.999
     run_name = context.get("run_name") or datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    num_gpus = server.server_def.default_session_config.device_count["GPU"]
+    if len(server.server_def.cluster.job) > 1:
+        num_workers = len(server.server_def.cluster.job[1].tasks)
+    else:
+        num_workers = len(server.server_def.cluster.job[0].tasks)
 
-    z_placeholder = tf.placeholder(tf.float32, [None, z_dimensions], name='z_placeholder')
-    # z_placeholder is for feeding input noise to the generator
+    for i in xrange(num_workers):
+        with tf.device("/job:worker/task:%d" % i):
+            z_placeholder = tf.placeholder(tf.float32, [None, z_dimensions], name='z_placeholder')
+            # z_placeholder is for feeding input noise to the generator
 
-    x_placeholder = tf.placeholder(tf.float32, shape=[None, 28, 28, 1], name='x_placeholder')
-    # x_placeholder is for feeding input images to the discriminator
+            x_placeholder = tf.placeholder(tf.float32, shape=[None, 28, 28, 1], name='x_placeholder')
+            # x_placeholder is for feeding input images to the discriminator
 
-    Gz = generator(z_placeholder, batch_size, z_dimensions)
-    # Gz holds the generated images
+            Gz = generator(z_placeholder, batch_size, z_dimensions)
+            # Gz holds the generated images
 
-    Dx = discriminator(x_placeholder)
-    d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dx, labels=tf.ones_like(Dx)))
-    # Dx will hold discriminator prediction probabilities
-    # for the real MNIST images
+            Dx = discriminator(x_placeholder)
+            d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dx, labels=tf.ones_like(Dx)))
+            # Dx will hold discriminator prediction probabilities
+            # for the real MNIST images
 
-    Dg = discriminator(Gz, reuse_variables=True)
-    d_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dg, labels=tf.zeros_like(Dg)))
-    g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dg, labels=tf.ones_like(Dg)))
-    # Dg will hold discriminator prediction probabilities for generated images
+            Dg = discriminator(Gz, reuse_variables=True)
+            d_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dg, labels=tf.zeros_like(Dg)))
+            g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=Dg, labels=tf.ones_like(Dg)))
+            # Dg will hold discriminator prediction probabilities for generated images
 
-    # Define variable lists
-    tvars = tf.trainable_variables()
-    d_vars = [var for var in tvars if 'd_' in var.name]
-    g_vars = [var for var in tvars if 'g_' in var.name]
+            # Define variable lists
+            tvars = tf.trainable_variables()
+            d_vars = [var for var in tvars if 'd_' in var.name]
+            g_vars = [var for var in tvars if 'g_' in var.name]
 
-    global_step = tf.Variable(0, trainable=False, name='g_global_step')
+            global_step = tf.Variable(0, trainable=False, name='g_global_step')
 
-    # Train the generator
-    g_opt = tf.train.AdamOptimizer(g_learning_rate, beta1=beta1, beta2=beta2)
-    # g_opt = tf.train.SyncReplicasOptimizer(g_opt, replicas_to_aggregate=num_workers-2,
-    #                                       total_num_replicas=num_workers-1)
-    g_trainer = g_opt.minimize(g_loss, var_list=g_vars, global_step=global_step)
+            # Train the generator
+            g_opt = tf.train.AdamOptimizer(g_learning_rate, beta1=beta1, beta2=beta2)
+            g_trainer = g_opt.minimize(g_loss, var_list=g_vars, global_step=global_step)
 
-    # Train the fake discriminator
-    d_opt_fake = tf.train.AdamOptimizer(d_fake_learning_rate, beta1=beta1, beta2=beta2)
-    # d_opt_fake = tf.train.SyncReplicasOptimizer(d_opt_fake, replicas_to_aggregate=num_workers-2,
-    #                                            total_num_replicas=num_workers-1)
-    d_trainer_fake = d_opt_fake.minimize(d_loss_fake, var_list=d_vars, global_step=global_step)
+            # Train the fake discriminator
+            d_opt_fake = tf.train.AdamOptimizer(d_fake_learning_rate, beta1=beta1, beta2=beta2)
+            d_trainer_fake = d_opt_fake.minimize(d_loss_fake, var_list=d_vars, global_step=global_step)
 
-    # Train the real discriminator
-    d_opt_real = tf.train.AdamOptimizer(d_real_learning_rate, beta1=beta1, beta2=beta2)
-    # d_opt_real = tf.train.SyncReplicasOptimizer(d_opt_real, replicas_to_aggregate=num_workers-2,
-    #                                            total_num_replicas=num_workers-1)
-    d_trainer_real = d_opt_real.minimize(d_loss_real, var_list=d_vars, global_step=global_step)
+            # Train the real discriminator
+            d_opt_real = tf.train.AdamOptimizer(d_real_learning_rate, beta1=beta1, beta2=beta2)
+            d_trainer_real = d_opt_real.minimize(d_loss_real, var_list=d_vars, global_step=global_step)
 
     # From this point forward, reuse variables
     tf.get_variable_scope().reuse_variables()
