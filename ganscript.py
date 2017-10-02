@@ -201,5 +201,7 @@ def main(server, log_dir, context):
                 z_batch = np.random.normal(0, 1, size=[batch_size, z_dimensions])
                 summary = sess.run(merged, {z_placeholder: z_batch, x_placeholder: real_image_batch})
                 writer.add_summary(summary, gstep)
+            elif local_step % 100 == 0:
+                print("Worker reached local step {} (global step {})".format(local_step, gstep))
 
             local_step += 1
