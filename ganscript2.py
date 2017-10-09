@@ -110,6 +110,7 @@ def main(server, logdir, context):
     cluster = server.server_def.cluster
     is_chief = server.server_def.task_index == 0
     run_name = context.get("run_name") or datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    replica_modifier = context.get("replica_modifier") or 1
 
     if len(server.server_def.cluster.job) > 1:
         num_workers = len(server.server_def.cluster.job[1].tasks)
@@ -155,7 +156,7 @@ def main(server, logdir, context):
 
         # Train the generator
         g_opt = tf.train.AdamOptimizer(0.0001)
-        g_opt = tf.train.SyncReplicasOptimizer(g_opt, replicas_to_aggregate=num_workers*10,
+        g_opt = tf.train.SyncReplicasOptimizer(g_opt, replicas_to_aggregate=num_workers*replica_modifier,
                                                total_num_replicas=num_workers)
         global_step = tf.Variable(0, name='global_step', trainable=False)
         g_trainer = g_opt.minimize(g_loss, var_list=g_vars, global_step=global_step)
