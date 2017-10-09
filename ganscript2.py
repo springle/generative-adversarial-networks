@@ -109,6 +109,7 @@ def main(server, logdir, context):
     task_index = server.server_def.task_index
     cluster = server.server_def.cluster
     is_chief = server.server_def.task_index == 0
+    run_name = context.get("run_name") or datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
     if len(server.server_def.cluster.job) > 1:
         num_workers = len(server.server_def.cluster.job[1].tasks)
@@ -154,7 +155,8 @@ def main(server, logdir, context):
 
         # Train the generator
         g_opt = tf.train.AdamOptimizer(0.0001)
-        g_opt = tf.train.SyncReplicasOptimizer(g_opt, replicas_to_aggregate=num_workers, total_num_replicas=num_workers)
+        g_opt = tf.train.SyncReplicasOptimizer(g_opt, replicas_to_aggregate=num_workers*10,
+                                               total_num_replicas=num_workers)
         global_step = tf.Variable(0, name='global_step', trainable=False)
         g_trainer = g_opt.minimize(g_loss, var_list=g_vars, global_step=global_step)
 
@@ -179,6 +181,7 @@ def main(server, logdir, context):
                                            hooks=[sync_replicas_hook]) as sess:
 
         # Create writer for summaries
+        logdir = logdir + run_name + "/"
         writer = tf.summary.FileWriter(logdir, sess.graph) if is_chief else None
 
         # Pre-train discriminator
@@ -221,6 +224,6 @@ if __name__ == '__main__':
         log_device_placement=True
     )
     server = tf.train.Server.create_local_server(config=server_config)
-    logdir = "tensorboard/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + "/"
+    logdir = "tensorboard/"
     runtime_config = {}
     main(server, logdir, runtime_config)
