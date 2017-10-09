@@ -181,7 +181,7 @@ def main(server, logdir, context):
                                            hooks=[sync_replicas_hook]) as sess:
 
         # Create writer for summaries
-        logdir = logdir + run_name + "/"
+        logdir = logdir + "/" + run_name + "/"
         writer = tf.summary.FileWriter(logdir, sess.graph) if is_chief else None
 
         # Pre-train discriminator
